@@ -32,31 +32,38 @@ def get_string_resources(args: Namespace) -> StringResource:
     srcdir = args.srcdir
     game_edition = args.game_version.edition
 
-    language_files = game_edition.media_paths[MediaType.LANGUAGE]
-
-    for language_file in language_files:
-        if game_edition.game_id in ("ROR", "AOC", "SWGB"):
+    if game_edition.game_id in ("ROR", "AOC", "SWGB"):
+        language_files = game_edition.media_paths[MediaType.LANGUAGE]
+        for language_file in language_files:
             # AoC/RoR use .DLL PE files for their string resources
             pefile = PEFile(srcdir[language_file].open('rb'))
             stringres.fill_from(pefile.resources().strings)
 
-        elif game_edition.game_id == "HDEDITION":
-            strings = read_hd_language_file(srcdir, language_file)
-            stringres.fill_from(strings)
+    elif game_edition.game_id == "HDEDITION":
+        # AoE2:HD has multiple language file layouts across versions.
+        #
+        # - HD Edition 3.x and below: Bin/$LANG/*.txt
+        # - Later HD versions: resources/$LANG/strings/key-value/*.txt
+        if srcdir["resources"].is_dir():
+            read_age2_hd_fe_stringresources(stringres, srcdir["resources"])
+        else:
+            read_age2_hd_3x_stringresources(stringres, srcdir)
 
-        elif game_edition.game_id == "AOE1DE":
+    elif game_edition.game_id == "AOE1DE":
+        language_files = game_edition.media_paths[MediaType.LANGUAGE]
+        for language_file in language_files:
             strings = read_de1_language_file(srcdir, language_file)
             stringres.fill_from(strings)
 
-        elif game_edition.game_id == "AOE2DE":
+    elif game_edition.game_id == "AOE2DE":
+        language_files = game_edition.media_paths[MediaType.LANGUAGE]
+        for language_file in language_files:
             strings = read_de2_language_file(srcdir, language_file)
             stringres.fill_from(strings)
 
-        else:
-            raise KeyError("No service found for parsing language files "
-                           f"of version {game_edition.game_id}")
-
-        # TODO: Other game versions
+    else:
+        raise KeyError("No service found for parsing language files "
+                       f"of version {game_edition.game_id}")
 
     # TODO: transform and cleanup the read strings:
     #       convert formatting indicators from HTML to something sensible, etc

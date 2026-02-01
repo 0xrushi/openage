@@ -2,12 +2,27 @@
 
 #include "engine.h"
 
+#include <chrono>
+#include <fcntl.h>
+#include <future>
+#include <memory>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <thread>
+#include <unistd.h>
+
 #include "log/log.h"
 #include "log/message.h"
 
+#include "coord/phys.h"
 #include "cvar/cvar.h"
+#include "event/event_loop.h"
+#include "gamestate/event/spawn_entity.h"
+#include "gamestate/game.h"
+#include "gamestate/game_state.h"
 #include "gamestate/simulation.h"
 #include "presenter/presenter.h"
+#include "time/clock.h"
 #include "time/time_loop.h"
 
 
@@ -65,8 +80,154 @@ Engine::Engine(mode mode,
 		});
 	}
 
-	log::log(INFO << "Using " << this->threads.size() + 1 << " threads "
+	// Start IPC server for cross-process spawning
+	this->ipc_socket_fd = -1;
+	this->ipc_server_thread = std::jthread([this]() {
+		this->run_ipc_server();
+	});
+
+	log::log(INFO << "Using " << this->threads.size() + 2 << " threads "
 	              << "(" << std::jthread::hardware_concurrency() << " available)");
+}
+
+void Engine::run_ipc_server() {
+	// Socket path
+	const char *socket_path = "/tmp/openage_spawn.sock";
+
+	// Remove old socket file if exists
+	unlink(socket_path);
+
+	// Create Unix domain socket
+	this->ipc_socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (this->ipc_socket_fd < 0) {
+		log::log(MSG(err) << "Failed to create IPC socket");
+		return;
+	}
+
+	// Bind to socket path
+	struct sockaddr_un addr;
+	addr.sun_family = AF_UNIX;
+	strcpy(addr.sun_path, socket_path);
+
+	if (bind(this->ipc_socket_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+		log::log(MSG(err) << "Failed to bind IPC socket");
+		close(this->ipc_socket_fd);
+		return;
+	}
+
+	// Listen for connections
+	if (listen(this->ipc_socket_fd, 5) < 0) {
+		log::log(MSG(err) << "Failed to listen on IPC socket");
+		close(this->ipc_socket_fd);
+		return;
+	}
+
+	// Set socket to non-blocking
+	fcntl(this->ipc_socket_fd, F_SETFL, O_NONBLOCK);
+
+	log::log(MSG(info) << "IPC socket server started: " << socket_path);
+
+	// Accept connections loop
+	char buffer[2048];
+	while (this->running) {
+		// Accept client connection (with timeout)
+		struct timeval tv;
+		tv.tv_sec = 0;
+		tv.tv_usec = 100000; // 100ms timeout
+
+		fd_set readfds;
+		FD_ZERO(&readfds);
+		FD_SET(this->ipc_socket_fd, &readfds);
+
+		int select_result = select(this->ipc_socket_fd + 1, &readfds, nullptr, nullptr, &tv);
+
+		if (select_result > 0) {
+			int client_fd = accept(this->ipc_socket_fd, nullptr, nullptr);
+			if (client_fd >= 0) {
+				// Read command
+				ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer) - 1);
+				if (bytes_read > 0) {
+					buffer[bytes_read] = '\0';
+
+					// Parse spawn command
+					std::string command(buffer);
+
+					// Extract parameters: spawn|<nyan_entity>|<owner>|<ne>|<se>|<up>
+					size_t pos1 = command.find('|');
+					if (pos1 != std::string::npos && command.substr(0, pos1) == "spawn") {
+						size_t pos2 = command.find('|', pos1 + 1);
+						size_t pos3 = command.find('|', pos2 + 1);
+						size_t pos4 = command.find('|', pos3 + 1);
+
+						if (pos2 != std::string::npos
+						    && pos3 != std::string::npos
+						    && pos4 != std::string::npos) {
+							std::string nyan_entity = command.substr(pos1 + 1, pos2 - pos1 - 1);
+							size_t owner = std::atoll(command.substr(pos2 + 1, pos3 - pos2 - 1).c_str());
+							double ne = std::atof(command.substr(pos3 + 1, pos4 - pos3 - 1).c_str());
+
+							// se field; atof stops at '|' if up follows
+							double se = std::atof(command.substr(pos4 + 1).c_str());
+
+							coord::phys3 pos{coord::phys_t{ne}, coord::phys_t{se}, coord::phys_t{0.0}};
+
+							std::string response;
+
+							// Wait for the simulation to be ready
+							auto game = this->simulation->get_game();
+							if (!game) {
+								response = "0|ERROR: Game not started yet";
+							}
+							else {
+								// Create a promise to receive the entity ID from the event handler
+								auto result_promise = std::make_shared<std::promise<uint64_t>>();
+								auto result_future = result_promise->get_future();
+
+								// Build event parameters
+								openage::event::EventHandler::param_map::map_t params{
+									{"position", pos},
+									{"owner", owner},
+									{"nyan_entity", nyan_entity},
+									{"result_promise", result_promise},
+								};
+
+								// Queue the spawn event on the event loop
+								auto current_time = this->time_loop->get_clock()->get_time();
+								this->simulation->get_event_loop()->create_event(
+									"game.spawn_entity",
+									this->simulation->get_spawner(),
+									game->get_state(),
+									current_time,
+									params);
+
+								// Wait for the event to be processed (with timeout)
+								auto status = result_future.wait_for(std::chrono::seconds(5));
+								if (status == std::future_status::ready) {
+									uint64_t entity_id = result_future.get();
+									response = std::to_string(entity_id)
+									           + "|SUCCESS: Spawned " + nyan_entity;
+								}
+								else {
+									response = "0|ERROR: Spawn timed out for " + nyan_entity;
+								}
+							}
+
+							write(client_fd, response.c_str(), response.length());
+						}
+					}
+					close(client_fd);
+				}
+			}
+		}
+
+		// Small sleep to reduce CPU usage
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	}
+
+	// Cleanup
+	close(this->ipc_socket_fd);
+	unlink(socket_path);
+	log::log(MSG(info) << "IPC socket server stopped");
 }
 
 void Engine::loop() {
@@ -75,6 +236,7 @@ void Engine::loop() {
 
 	// After stopping, clean up the simulation
 	this->simulation.reset();
+
 	if (this->run_mode != mode::FULL) {
 		this->running = false;
 	}

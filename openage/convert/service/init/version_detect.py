@@ -43,6 +43,14 @@ def iterate_game_versions(
             for required_path in check_paths:
                 required_file = srcdir.joinpath(required_path)
 
+                # Legacy AoE2:HD installs may use the classic "Data/" layout instead of the
+                # DE-like "resources/_common/" layout.
+                if (not required_file.is_file()
+                        and game_edition.game_id == "HDEDITION"
+                        and required_path.lower().endswith("empires2_x1_p1.dat")
+                        and "resources/_common/dat/" in required_path.lower()):
+                    required_file = srcdir.joinpath("Data/empires2_x1_p1.dat")
+
                 if required_file.is_file():
                     hash_val = hash_file(required_file,
                                          hash_algo=detection_hints.hash_algo)

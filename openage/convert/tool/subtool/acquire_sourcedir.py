@@ -55,9 +55,18 @@ def prompt(msg: str, answer: typing.Union[bool, None] = None) -> bool:
     :param answer: Pre-determined answer (optional).
     """
     while answer is None:
+        if not sys.stdin.isatty():
+            # Non-interactive stdin: default to "no"
+            return False
+
         print(f"  {msg} [Y/n]")
 
-        user_selection = input("> ")
+        try:
+            user_selection = input("> ")
+        except (EOFError, KeyboardInterrupt):
+            # Non-interactive stdin or user aborted input: default to "no"
+            return False
+
         if user_selection.lower() in {"yes", "y", ""}:
             answer = True
 

@@ -96,7 +96,8 @@ def main(args, error):
     if wanna_convert():
         convert_assets(asset_path, args)
 
-    available_modpacks = enumerate_modpacks(asset_path / "converted", exclude={"engine"})
+    all_modpacks = enumerate_modpacks(asset_path / "converted")
+    available_modpacks = {name: version for name, version in all_modpacks.items() if name != "engine"}
     if len(available_modpacks) == 0:
         info("No modpacks have been found")
         if not args.modpacks:
@@ -110,7 +111,7 @@ def main(args, error):
     if args.modpacks:
         # ensure that specified modpacks are available
         for modpack in args.modpacks:
-            if modpack not in available_modpacks:
+            if modpack not in all_modpacks:
                 raise FileNotFoundError(
                     f"Modpack '{modpack}' not found in {asset_path / 'converted'}")
 

@@ -114,6 +114,12 @@ const std::shared_ptr<gamestate::event::Commander> GameSimulation::get_commander
 	return this->commander;
 }
 
+const std::shared_ptr<gamestate::EntityFactory> GameSimulation::get_entity_factory() {
+	std::shared_lock lock{this->mutex};
+
+	return this->entity_factory;
+}
+
 void GameSimulation::attach_renderer(const std::shared_ptr<renderer::RenderFactory> &render_factory) {
 	std::unique_lock lock{this->mutex};
 

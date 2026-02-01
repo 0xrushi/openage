@@ -45,6 +45,7 @@ class Spawner;
  */
 class GameSimulation final {
 public:
+	const std::shared_ptr<gamestate::EntityFactory> get_entity_factory();
 	/**
 	 * Create the game simulation subsystems depending on the requested run mode.
 	 *

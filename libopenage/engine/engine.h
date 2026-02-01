@@ -134,6 +134,17 @@ private:
 	 * Video/audio/input management. Can be nullptr in headless mode.
 	 */
 	std::shared_ptr<presenter::Presenter> presenter;
+
+	/**
+	 * IPC socket server for cross-process spawning.
+	 */
+	std::jthread ipc_server_thread;
+	int ipc_socket_fd;
+
+	/**
+	 * Run IPC socket server thread.
+	 */
+	void run_ipc_server();
 };
 
 } // namespace engine

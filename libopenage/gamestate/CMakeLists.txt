@@ -17,6 +17,22 @@ add_sources(libopenage
 	universe.cpp
 )
 
+# Create spawn_tool executable
+add_executable(spawn_tool
+    spawn_tool.cpp
+)
+
+target_link_libraries(spawn_tool
+    PRIVATE
+    libopenage
+)
+
+# Install spawn_tool to bin directory
+install(
+    TARGETS spawn_tool
+    RUNTIME DESTINATION bin
+)
+
 add_subdirectory(activity/)
 add_subdirectory(api/)
 add_subdirectory(component/)

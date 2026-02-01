@@ -29,6 +29,14 @@ def get_gamespec(srcdir: Directory, game_version: GameVersion, pickle_cache: boo
     if game_version.edition.game_id in ("ROR", "AOE1DE", "AOC", "HDEDITION", "AOE2DE"):
         filepath = srcdir.joinpath(game_version.edition.media_paths[MediaType.DATFILE][0])
 
+        # Legacy AoE2:HD installs use the classic "Data/" folder layout.
+        if (not filepath.is_file()
+                and game_version.edition.game_id == "HDEDITION"
+                and filepath.name.lower() == "empires2_x1_p1.dat"):
+            legacy_path = srcdir.joinpath("Data/empires2_x1_p1.dat")
+            if legacy_path.is_file():
+                filepath = legacy_path
+
     elif game_version.edition.game_id == "SWGB":
         if "SWGB_CC" in [expansion.game_id for expansion in game_version.expansions]:
             filepath = srcdir.joinpath(game_version.expansions[0].media_paths[MediaType.DATFILE][0])
