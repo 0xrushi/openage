@@ -9,4 +9,5 @@ add_cython_modules(
 
 add_py_modules(
 	__init__.py
+	game_control.py
 )

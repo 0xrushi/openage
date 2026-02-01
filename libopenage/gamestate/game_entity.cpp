@@ -8,6 +8,7 @@
 #include "gamestate/component/api/idle.h"
 #include "gamestate/component/api/move.h"
 #include "gamestate/component/base_component.h"
+#include "gamestate/component/internal/ownership.h"
 #include "gamestate/component/internal/position.h"
 #include "renderer/stages/world/render_entity.h"
 
@@ -65,7 +66,15 @@ void GameEntity::render_update(const time::time_t &time,
 		const auto &angle = dynamic_pointer_cast<component::Position>(
 								this->components.at(component::component_t::POSITION))
 		                        ->get_angles();
-		this->render_entity->update(this->id, pos, angle, animation_path, time);
+
+		uint32_t owner = 0;
+		if (this->has_component(component::component_t::OWNERSHIP)) {
+			auto ownership = dynamic_pointer_cast<component::Ownership>(
+				this->components.at(component::component_t::OWNERSHIP));
+			owner = static_cast<uint32_t>(ownership->get_owners().get(time));
+		}
+
+		this->render_entity->update(this->id, pos, angle, animation_path, time, owner);
 	}
 }
 

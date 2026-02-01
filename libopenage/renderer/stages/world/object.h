@@ -155,6 +155,7 @@ public:
 	inline static uniform_id_t scale;
 	inline static uniform_id_t subtex_size;
 	inline static uniform_id_t anchor_offset;
+	inline static uniform_id_t u_owner;
 
 private:
 	/**
@@ -184,6 +185,11 @@ private:
 	 * the engine.
 	 */
 	uint32_t ref_id;
+
+	/**
+	 * Owner/player ID for team color rendering.
+	 */
+	uint32_t owner_id;
 
 	/**
 	 * Position of the object.

@@ -128,6 +128,21 @@ mrproperer: mrproper
 	@read val
 	git clean -x -d -f
 
+.PHONY: pytest
+pytest:
+ifndef FILE
+	@echo "Usage: make pytest FILE=pythontests/integration/test_attack_target.py"
+	@echo "       make pytest FILE=openage/testing/agent_control_test.py"
+	@false
+else
+	@$(MAKE) $(MAKEARGS) build
+	cd $(BUILDDIR) && PYTHONPATH=. python3 $(CURDIR)/$(FILE)
+endif
+
+.PHONY: unittest
+unittest: build
+	cd $(BUILDDIR) && ./run test openage.testing.agent_control_test.test
+
 .PHONY: checkfast
 checkfast:
 	python3 -m buildsystem.codecompliance --fast
@@ -181,6 +196,8 @@ help: $(BUILDDIR)/Makefile
 	@echo ""
 	@echo "run                -> run openage"
 	@echo "tests              -> run the tests (py + cpp)"
+	@echo "pytest FILE=<path> -> run a single python test file (relative to repo root)"
+	@echo "unittest           -> run agent_control unit tests via the test runner"
 	@echo ""
 	@echo "checkall           -> full code compliance check"
 	@echo "checkmerge         -> code compliance check for merging to master"

@@ -154,6 +154,7 @@ void WorldRenderStage::init_uniform_ids() {
 	WorldObject::scale = this->display_shader->get_uniform_id("scale");
 	WorldObject::subtex_size = this->display_shader->get_uniform_id("subtex_size");
 	WorldObject::anchor_offset = this->display_shader->get_uniform_id("anchor_offset");
+	WorldObject::u_owner = this->display_shader->get_uniform_id("u_owner");
 }
 
 } // namespace openage::renderer::world

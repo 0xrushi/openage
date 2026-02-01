@@ -36,6 +36,7 @@ WorldObject::WorldObject(const std::shared_ptr<renderer::resources::AssetManager
 	asset_manager{asset_manager},
 	render_entity{nullptr},
 	ref_id{0},
+	owner_id{0},
 	position{nullptr, 0, "", nullptr, SCENE_ORIGIN},
 	angle{nullptr, 0, "", nullptr, 0},
 	animation_info{nullptr, 0},
@@ -63,6 +64,7 @@ void WorldObject::fetch_updates(const time::time_t &time) {
 
 	// Get data from render entity
 	this->ref_id = this->render_entity->get_id();
+	this->owner_id = this->render_entity->get_owner_id();
 
 	// Thread-safe access to curves needs a lock on the render entity's mutex
 	auto read_lock = this->render_entity->get_read_lock();
@@ -109,6 +111,7 @@ void WorldObject::update_uniforms(const time::time_t &time) {
 	for (size_t layer_idx = 0; layer_idx < this->layer_uniforms.size(); ++layer_idx) {
 		auto &layer_unifs = this->layer_uniforms.at(layer_idx);
 		layer_unifs->update(this->obj_world_position, current_pos.to_world_space());
+		layer_unifs->update(this->u_owner, this->owner_id);
 
 		// Frame subtexture
 		auto &layer = animation_info->get_layer(layer_idx);

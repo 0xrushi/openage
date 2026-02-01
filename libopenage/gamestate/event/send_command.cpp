@@ -6,7 +6,6 @@
 
 #include "coord/phys.h"
 #include "gamestate/component/internal/command_queue.h"
-#include "gamestate/component/internal/commands/idle.h"
 #include "gamestate/component/internal/commands/move.h"
 #include "gamestate/component/types.h"
 #include "gamestate/game_entity.h"
@@ -19,7 +18,6 @@ namespace component {
 class CommandQueue;
 
 namespace command {
-class IdleCommand;
 class MoveCommand;
 } // namespace command
 } // namespace component
@@ -65,7 +63,11 @@ void SendCommandHandler::invoke(openage::event::EventLoop & /* loop */,
 
 		switch (command_type) {
 		case component::command::command_t::IDLE:
-			command_queue->add_command(time, std::make_shared<component::command::IdleCommand>());
+			// "Stop" behavior: clear queued commands.
+			// Note: Do not enqueue an IDLE command. The activity system treats an empty
+			//       command queue as idle; an explicit IDLE command would block later MOVE
+			//       commands because it would stay at the front of the queue.
+			command_queue->get_queue().clear(time);
 			break;
 		case component::command::command_t::MOVE:
 			command_queue->add_command(

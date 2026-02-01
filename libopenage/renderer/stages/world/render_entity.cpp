@@ -13,6 +13,7 @@ namespace openage::renderer::world {
 RenderEntity::RenderEntity() :
 	renderer::RenderEntity{},
 	ref_id{0},
+	owner_id{0},
 	position{nullptr, 0, "", nullptr, SCENE_ORIGIN},
 	angle{nullptr, 0, "", nullptr, 0},
 	animation_path{nullptr, 0} {
@@ -22,10 +23,12 @@ void RenderEntity::update(const uint32_t ref_id,
                           const curve::Continuous<coord::phys3> &position,
                           const curve::Segmented<coord::phys_angle_t> &angle,
                           const std::string animation_path,
-                          const time::time_t time) {
+                          const time::time_t time,
+                          const uint32_t owner_id) {
 	std::unique_lock lock{this->mutex};
 
 	this->ref_id = ref_id;
+	this->owner_id = owner_id;
 	std::function<coord::scene3(const coord::phys3 &)> to_scene3 = [](const coord::phys3 &pos) {
 		return pos.to_scene3();
 	};
@@ -57,6 +60,12 @@ uint32_t RenderEntity::get_id() {
 	std::shared_lock lock{this->mutex};
 
 	return this->ref_id;
+}
+
+uint32_t RenderEntity::get_owner_id() {
+	std::shared_lock lock{this->mutex};
+
+	return this->owner_id;
 }
 
 const curve::Continuous<coord::scene3> &RenderEntity::get_position() {

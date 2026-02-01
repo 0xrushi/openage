@@ -34,7 +34,7 @@ try:
     )
     has_live_game_control = True
 except (ImportError, ModuleNotFoundError) as e:
-    print(f"[DEBUG] Failed to import game_control: {e}")
+    # Optional feature: don't spam test output if unavailable.
     pass
 
 # Export available functions

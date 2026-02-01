@@ -80,11 +80,27 @@ class IpcClient:
             )
 
         entity_id, server_message = self._parse_response(response)
-        if entity_id <= 0:
-            err = server_message or "spawn failed"
+
+        # Protocol note: entity ids can be 0 in some game states.
+        # Prefer the message prefix to determine success/failure.
+        msg = (server_message or "").strip()
+        if msg.startswith("ERROR:"):
             return ActionResult.error_result(
                 action,
-                err,
+                msg,
+                entity_id=entity_id,
+                server_message=server_message,
+                command=cmd,
+            )
+
+        if msg.startswith("SUCCESS:"):
+            return ActionResult.ok_result(action, entity_id=entity_id, message=server_message)
+
+        # Fallback for unexpected servers: treat non-positive ids as failure.
+        if entity_id < 0:
+            return ActionResult.error_result(
+                action,
+                msg or "spawn failed",
                 entity_id=entity_id,
                 server_message=server_message,
                 command=cmd,
@@ -149,12 +165,120 @@ class IpcClient:
             message=server_message,
         )
 
-    def get_state(self, query: str) -> ActionResult:
+    def stop(self, entity_id: int) -> ActionResult:
+        action = "stop_character"
+        cmd = "stop|" + str(int(entity_id))
+
+        ok, response = self.request(cmd)
+        if not ok:
+            return ActionResult.error_result(
+                action,
+                f"IPC request failed: {response}",
+                socket_path=self.socket_path,
+                command=cmd,
+            )
+
+        if not response:
+            return ActionResult.error_result(action, "IPC server returned empty response", command=cmd)
+
+        status_code, server_message = self._parse_response(response)
+        if status_code == 0:
+            return ActionResult.error_result(
+                action,
+                server_message or "stop failed",
+                character_id=int(entity_id),
+                server_message=server_message,
+                command=cmd,
+            )
+
+        return ActionResult.ok_result(action, character_id=int(entity_id), message=server_message)
+
+    def patrol(self, entity_id: int, waypoints: list) -> ActionResult:
+        action = "patrol"
+        # Format: patrol|<entity_id>|<ne1>|<se1>|<up1>[|<ne2>|<se2>|<up2>...]
+        cmd_parts = ["patrol", str(int(entity_id))]
+        for wp in waypoints:
+            cmd_parts.append(f"{wp.ne:.6f}")
+            cmd_parts.append(f"{wp.se:.6f}")
+            cmd_parts.append(f"{wp.up:.6f}")
+        cmd = "|".join(cmd_parts)
+
+        ok, response = self.request(cmd)
+        if not ok:
+            return ActionResult.error_result(
+                action,
+                f"IPC request failed: {response}",
+                socket_path=self.socket_path,
+                command=cmd,
+            )
+
+        if not response:
+            return ActionResult.error_result(action, "IPC server returned empty response", command=cmd)
+
+        status_code, server_message = self._parse_response(response)
+        if status_code == 0:
+            return ActionResult.error_result(
+                action,
+                server_message or "patrol failed",
+                character_id=int(entity_id),
+                server_message=server_message,
+                command=cmd,
+            )
+
+        return ActionResult.ok_result(
+            action,
+            character_id=int(entity_id),
+            waypoint_count=len(waypoints),
+            message=server_message,
+        )
+
+    def attack_target(self, entity_id: int, target_entity_id: int) -> ActionResult:
+        action = "attack_target"
+        cmd = "attack|" + str(int(entity_id)) + "|" + str(int(target_entity_id))
+
+        ok, response = self.request(cmd)
+        if not ok:
+            return ActionResult.error_result(
+                action,
+                f"IPC request failed: {response}",
+                socket_path=self.socket_path,
+                command=cmd,
+            )
+
+        if not response:
+            return ActionResult.error_result(action, "IPC server returned empty response", command=cmd)
+
+        status_code, server_message = self._parse_response(response)
+        if status_code == 0:
+            return ActionResult.error_result(
+                action,
+                server_message or "attack failed",
+                character_id=int(entity_id),
+                target_id=int(target_entity_id),
+                server_message=server_message,
+                command=cmd,
+            )
+
+        return ActionResult.ok_result(
+            action,
+            character_id=int(entity_id),
+            target_id=int(target_entity_id),
+            message=server_message,
+        )
+
+    def get_state(self, query: str, **filters) -> ActionResult:
         action = "get_state"
         if query != "entities":
             return ActionResult.error_result(action, f"Unsupported query: {query}")
 
-        cmd = "state|entities"
+        # Encode filters as key=value segments.
+        # Example: state|entities|owner=0|has=move|limit=50
+        cmd_parts = ["state", "entities"]
+        for k, v in filters.items():
+            if v is None:
+                continue
+            cmd_parts.append(f"{k}={v}")
+        cmd = "|".join(cmd_parts)
         ok, response = self.request(cmd)
         if not ok:
             return ActionResult.error_result(
@@ -176,4 +300,4 @@ class IpcClient:
         except Exception as exc:
             return ActionResult.error_result(action, f"Failed to parse JSON state: {exc}", raw=payload)
 
-        return ActionResult.ok_result(action, query=query, state=data)
+        return ActionResult.ok_result(action, query=query, filters=dict(filters), state=data)

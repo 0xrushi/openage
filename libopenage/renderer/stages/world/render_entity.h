@@ -38,7 +38,8 @@ public:
 	            const curve::Continuous<coord::phys3> &position,
 	            const curve::Segmented<coord::phys_angle_t> &angle,
 	            const std::string animation_path,
-	            const time::time_t time = 0.0);
+	            const time::time_t time = 0.0,
+	            const uint32_t owner_id = 0);
 
 	/**
 	 * This function is for DEBUGGING and should not be used.
@@ -65,6 +66,15 @@ public:
 	 * @return Game entity ID.
 	 */
 	uint32_t get_id();
+
+	/**
+	 * Get the owner/player ID.
+	 *
+	 * Accessing the owner ID is thread-safe.
+	 *
+	 * @return Owner/player ID.
+	 */
+	uint32_t get_owner_id();
 
 	/**
 	 * Get the position of the entity inside the game world.
@@ -101,6 +111,11 @@ private:
 	 * ID of the game entity in the gamestate.
 	 */
 	uint32_t ref_id;
+
+	/**
+	 * Owner/player ID for team color rendering.
+	 */
+	uint32_t owner_id;
 
 	/**
 	 * Position inside the game world.

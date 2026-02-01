@@ -217,8 +217,8 @@ void Engine::run_ipc_server() {
 									current_time,
 									params);
 
-								// Wait for the event to be processed (with timeout)
-								auto status = result_future.wait_for(std::chrono::seconds(5));
+							// Wait for the event to be processed (with timeout)
+							auto status = result_future.wait_for(std::chrono::seconds(10));
 								if (status == std::future_status::ready) {
 									uint64_t entity_id = result_future.get();
 									response = std::to_string(entity_id)
@@ -248,25 +248,250 @@ void Engine::run_ipc_server() {
 								response = "0|ERROR: Game not started yet";
 							}
 							else {
-								openage::event::EventHandler::param_map::map_t params{
-									{"type", gamestate::component::command::command_t::MOVE},
-									{"target", target},
-									{"entity_ids", std::vector<gamestate::entity_id_t>{static_cast<gamestate::entity_id_t>(entity_id)}},
-								};
+							auto gstate = game->get_state();
+							const auto &entities = gstate->get_game_entities();
+								auto id = static_cast<gamestate::entity_id_t>(entity_id);
+								if (!entities.contains(id)) {
+									response = "0|ERROR: Entity does not exist";
+								}
+								else {
+									auto ent = entities.at(id);
+									if (!ent) {
+										response = "0|ERROR: Entity is null";
+									}
+									else if (!ent->has_component(gamestate::component::component_t::COMMANDQUEUE)) {
+										response = "0|ERROR: Entity has no command queue";
+									}
+									else if (!ent->has_component(gamestate::component::component_t::MOVE)) {
+										response = "0|ERROR: Entity cannot move";
+									}
+									else {
+										openage::event::EventHandler::param_map::map_t params{
+										{"type", gamestate::component::command::command_t::MOVE},
+										{"target", target},
+										{"entity_ids", std::vector<gamestate::entity_id_t>{id}},
+									};
 
-								auto current_time = this->time_loop->get_clock()->get_time();
-								this->simulation->get_event_loop()->create_event(
-									"game.send_command",
-									std::static_pointer_cast<openage::event::EventEntity>(this->simulation->get_commander()),
-									game->get_state(),
-									current_time,
-									params);
+									auto current_time = this->time_loop->get_clock()->get_time();
+									this->simulation->get_event_loop()->create_event(
+										"game.send_command",
+										std::static_pointer_cast<openage::event::EventEntity>(this->simulation->get_commander()),
+										gstate,
+										current_time,
+										params);
 
-								response = "1|SUCCESS: Move queued";
+									response = "1|SUCCESS: Move queued";
+									}
+								}
 							}
 						}
 						catch (const std::exception &e) {
 							response = std::string{"0|ERROR: Move parse failed: "} + e.what();
+						}
+					}
+					// stop|<entity_id>
+					else if (parts.size() >= 2 && (parts[0] == "stop" || parts[0] == "idle")) {
+						try {
+							auto entity_id = static_cast<uint64_t>(std::stoull(parts[1]));
+
+							auto game = this->simulation->get_game();
+							if (!game) {
+								response = "0|ERROR: Game not started yet";
+							}
+							else {
+								auto gstate = game->get_state();
+							const auto &entities = gstate->get_game_entities();
+								auto id = static_cast<gamestate::entity_id_t>(entity_id);
+								if (!entities.contains(id)) {
+									response = "0|ERROR: Entity does not exist";
+								}
+								else {
+									auto ent = entities.at(id);
+									if (!ent) {
+										response = "0|ERROR: Entity is null";
+									}
+									else if (!ent->has_component(gamestate::component::component_t::COMMANDQUEUE)) {
+										response = "0|ERROR: Entity has no command queue";
+									}
+									else {
+										openage::event::EventHandler::param_map::map_t params{
+										{"type", gamestate::component::command::command_t::IDLE},
+										{"entity_ids", std::vector<gamestate::entity_id_t>{id}},
+									};
+
+									auto current_time = this->time_loop->get_clock()->get_time();
+									this->simulation->get_event_loop()->create_event(
+										"game.send_command",
+										std::static_pointer_cast<openage::event::EventEntity>(this->simulation->get_commander()),
+										gstate,
+										current_time,
+										params);
+
+									response = "1|SUCCESS: Stop queued";
+									}
+								}
+							}
+						}
+						catch (const std::exception &e) {
+							response = std::string{"0|ERROR: Stop parse failed: "} + e.what();
+						}
+					}
+					// attack|<entity_id>|<target_entity_id>
+					else if (parts.size() >= 3 && parts[0] == "attack") {
+						try {
+							auto entity_id = static_cast<uint64_t>(std::stoull(parts[1]));
+							auto target_id = static_cast<uint64_t>(std::stoull(parts[2]));
+
+							auto game = this->simulation->get_game();
+							if (!game) {
+								response = "0|ERROR: Game not started yet";
+							}
+							else {
+								auto gstate = game->get_state();
+								const auto &entities = gstate->get_game_entities();
+								auto id = static_cast<gamestate::entity_id_t>(entity_id);
+								auto tid = static_cast<gamestate::entity_id_t>(target_id);
+								if (!entities.contains(id)) {
+									response = "0|ERROR: Entity does not exist";
+								}
+								else if (!entities.contains(tid)) {
+									response = "0|ERROR: Target entity does not exist";
+								}
+								else {
+									auto ent = entities.at(id);
+									auto target_ent = entities.at(tid);
+									if (!ent) {
+										response = "0|ERROR: Entity is null";
+									}
+									else if (!target_ent) {
+										response = "0|ERROR: Target entity is null";
+									}
+									else if (!ent->has_component(gamestate::component::component_t::COMMANDQUEUE)) {
+										response = "0|ERROR: Entity has no command queue";
+									}
+									else if (!ent->has_component(gamestate::component::component_t::MOVE)) {
+										response = "0|ERROR: Entity cannot move";
+									}
+									else if (!target_ent->has_component(gamestate::component::component_t::POSITION)) {
+										response = "0|ERROR: Target entity has no position";
+									}
+									else {
+										// Resolve target position and queue a MOVE toward it.
+										auto now = this->time_loop->get_clock()->get_time();
+										auto target_pos_comp = std::dynamic_pointer_cast<gamestate::component::Position>(
+											target_ent->get_component(gamestate::component::component_t::POSITION));
+										auto target_pos = target_pos_comp->get_positions().get(now);
+
+										openage::event::EventHandler::param_map::map_t params{
+											{"type", gamestate::component::command::command_t::MOVE},
+											{"target", target_pos},
+											{"entity_ids", std::vector<gamestate::entity_id_t>{id}},
+										};
+
+										auto current_time = this->time_loop->get_clock()->get_time();
+										this->simulation->get_event_loop()->create_event(
+											"game.send_command",
+											std::static_pointer_cast<openage::event::EventEntity>(this->simulation->get_commander()),
+											gstate,
+											current_time,
+											params);
+
+										response = "1|SUCCESS: Attack-move queued toward entity " + std::to_string(target_id);
+									}
+								}
+							}
+						}
+						catch (const std::exception &e) {
+							response = std::string{"0|ERROR: Attack parse failed: "} + e.what();
+						}
+					}
+					// patrol|<entity_id>|<ne1>|<se1>|<up1>[|<ne2>|<se2>|<up2>...]
+					else if (parts.size() >= 5 && parts[0] == "patrol") {
+						try {
+							auto entity_id = static_cast<uint64_t>(std::stoull(parts[1]));
+
+							// Parse waypoints (groups of 3 coordinates after entity_id).
+							size_t coord_count = parts.size() - 2;
+							if (coord_count % 3 != 0 || coord_count < 3) {
+								response = "0|ERROR: Patrol needs at least one waypoint (groups of ne,se,up)";
+							}
+							else {
+								std::vector<coord::phys3> waypoints;
+								waypoints.reserve(coord_count / 3);
+								for (size_t i = 2; i < parts.size(); i += 3) {
+									double ne = std::stod(parts[i]);
+									double se = std::stod(parts[i + 1]);
+									double up = std::stod(parts[i + 2]);
+									waypoints.push_back(coord::phys3{coord::phys_t{ne}, coord::phys_t{se}, coord::phys_t{up}});
+								}
+
+								auto game = this->simulation->get_game();
+								if (!game) {
+									response = "0|ERROR: Game not started yet";
+								}
+								else {
+									auto gstate = game->get_state();
+									const auto &entities = gstate->get_game_entities();
+									auto id = static_cast<gamestate::entity_id_t>(entity_id);
+									if (!entities.contains(id)) {
+										response = "0|ERROR: Entity does not exist";
+									}
+									else {
+										auto ent = entities.at(id);
+										if (!ent) {
+											response = "0|ERROR: Entity is null";
+										}
+										else if (!ent->has_component(gamestate::component::component_t::COMMANDQUEUE)) {
+											response = "0|ERROR: Entity has no command queue";
+										}
+										else if (!ent->has_component(gamestate::component::component_t::MOVE)) {
+											response = "0|ERROR: Entity cannot move";
+										}
+										else {
+											auto current_time = this->time_loop->get_clock()->get_time();
+											// Ensure deterministic ordering: events at equal times can execute in any order.
+											// We schedule the queue-clear at current_time and the subsequent MOVE commands
+											// at monotonically increasing times.
+											auto step = time::time_t::from_double(0.001);
+
+											// First clear the queue.
+											openage::event::EventHandler::param_map::map_t idle_params{
+												{"type", gamestate::component::command::command_t::IDLE},
+												{"entity_ids", std::vector<gamestate::entity_id_t>{id}},
+											};
+											this->simulation->get_event_loop()->create_event(
+												"game.send_command",
+												std::static_pointer_cast<openage::event::EventEntity>(this->simulation->get_commander()),
+												gstate,
+												current_time,
+												idle_params);
+
+											// Then queue a MOVE for each waypoint.
+											for (size_t i = 0; i < waypoints.size(); ++i) {
+												auto t = current_time + (step * (i + 1));
+												const auto &wp = waypoints[i];
+												openage::event::EventHandler::param_map::map_t move_params{
+													{"type", gamestate::component::command::command_t::MOVE},
+													{"target", wp},
+													{"entity_ids", std::vector<gamestate::entity_id_t>{id}},
+												};
+												this->simulation->get_event_loop()->create_event(
+													"game.send_command",
+													std::static_pointer_cast<openage::event::EventEntity>(this->simulation->get_commander()),
+													gstate,
+													t,
+													move_params);
+											}
+
+											response = "1|SUCCESS: Patrol queued with "
+											           + std::to_string(waypoints.size()) + " waypoint(s)";
+										}
+									}
+								}
+							}
+						}
+						catch (const std::exception &e) {
+							response = std::string{"0|ERROR: Patrol parse failed: "} + e.what();
 						}
 					}
 					// state|entities
@@ -276,18 +501,69 @@ void Engine::run_ipc_server() {
 							response = "0|ERROR: Game not started yet";
 						}
 						else {
+							// Optional filters: key=value pairs after "state|entities".
+							// Supported keys: owner, id, has, limit
+							bool filter_owner = false;
+							size_t owner_filter = 0;
+							bool filter_id = false;
+							uint64_t id_filter = 0;
+							std::string has_filter;
+							bool filter_limit = false;
+							size_t limit = 0;
+
+							for (size_t i = 2; i < parts.size(); ++i) {
+								auto &kv = parts[i];
+								auto eq = kv.find('=');
+								if (eq == std::string::npos) {
+									continue;
+								}
+								auto key = kv.substr(0, eq);
+								auto value = kv.substr(eq + 1);
+								try {
+									if (key == "owner") {
+										owner_filter = static_cast<size_t>(std::stoull(value));
+										filter_owner = true;
+									}
+									else if (key == "id") {
+										id_filter = static_cast<uint64_t>(std::stoull(value));
+										filter_id = true;
+									}
+									else if (key == "has") {
+										has_filter = value;
+									}
+									else if (key == "limit") {
+										limit = static_cast<size_t>(std::stoull(value));
+										filter_limit = true;
+									}
+								}
+								catch (...) {
+									// ignore bad filter
+								}
+							}
+
 							auto gstate = game->get_state();
 							auto now = this->time_loop->get_clock()->get_time();
 
 							std::ostringstream ss;
 							ss << "{\"entities\":[";
 							bool first = true;
+							size_t emitted = 0;
 							for (const auto &kv : gstate->get_game_entities()) {
 								const auto &entity = kv.second;
 								if (!entity) {
 									continue;
 								}
 
+								if (filter_id && entity->get_id() != static_cast<gamestate::entity_id_t>(id_filter)) {
+									continue;
+								}
+
+								if (!entity->has_component(gamestate::component::component_t::POSITION)) {
+									continue;
+								}
+								if (!entity->has_component(gamestate::component::component_t::OWNERSHIP)) {
+									continue;
+								}
 								auto pos_comp = std::dynamic_pointer_cast<gamestate::component::Position>(
 									entity->get_component(gamestate::component::component_t::POSITION));
 								auto owner_comp = std::dynamic_pointer_cast<gamestate::component::Ownership>(
@@ -300,6 +576,22 @@ void Engine::run_ipc_server() {
 								auto pos = pos_comp->get_positions().get(now);
 								auto owner = owner_comp->get_owners().get(now);
 
+								if (filter_owner && static_cast<size_t>(owner) != owner_filter) {
+									continue;
+								}
+
+								bool can_move = entity->has_component(gamestate::component::component_t::MOVE);
+								bool selectable = entity->has_component(gamestate::component::component_t::SELECTABLE);
+
+								if (!has_filter.empty()) {
+									if (has_filter == "move" && !can_move) {
+										continue;
+									}
+									if (has_filter == "selectable" && !selectable) {
+										continue;
+									}
+								}
+
 								if (!first) {
 									ss << ',';
 								}
@@ -307,9 +599,16 @@ void Engine::run_ipc_server() {
 
 								ss << "{\"id\":" << entity->get_id();
 								ss << ",\"owner\":" << owner;
+								ss << ",\"can_move\":" << (can_move ? "true" : "false");
+								ss << ",\"selectable\":" << (selectable ? "true" : "false");
 								ss << ",\"pos\":{\"ne\":" << pos.ne.to_double();
 								ss << ",\"se\":" << pos.se.to_double();
 								ss << ",\"up\":" << pos.up.to_double() << "}}";
+
+								++emitted;
+								if (filter_limit && emitted >= limit) {
+									break;
+								}
 							}
 							ss << "]}";
 

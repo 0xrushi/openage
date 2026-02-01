@@ -23,11 +23,7 @@ import json
 import os
 import sys
 import time
-from typing import TYPE_CHECKING
-
-
-if TYPE_CHECKING:
-    from openage.agent_control import OpenAgeAgent as _OpenAgeAgent
+from openage.agent_control import OpenAgeAgent
 
 
 def die(msg: str, code: int = 1) -> None:
@@ -41,22 +37,7 @@ def main() -> None:
     if not os.path.exists(sock_path):
         die(f"IPC socket not found at {sock_path}. Start the game first.")
 
-    OpenAgeAgent = None  # type: ignore[assignment]
-    try:
-        from openage.agent_control import OpenAgeAgent as _OpenAgeAgent
-        OpenAgeAgent = _OpenAgeAgent  # type: ignore[assignment]
-    except ModuleNotFoundError as exc:
-        die(
-            "Failed to import openage. Run from the build dir with PYTHONPATH set, e.g.\n"
-            "  cd /home/doraemon/Documents/openage/bin\n"
-            "  PYTHONPATH=. python3 ../pythontests/integration/test_state_entities.py\n"
-            f"\nOriginal error: {exc}"
-        )
-
-    if OpenAgeAgent is None:
-        die("OpenAgeAgent import failed")
-
-    agent = OpenAgeAgent(socket_path=sock_path)  # type: ignore[misc]
+    agent = OpenAgeAgent(socket_path=sock_path, timeout_s=8.0)
 
     spawn = agent.act(
         "spawn_character",
@@ -74,7 +55,7 @@ def main() -> None:
     move = agent.act(
         "move_character",
         tag="monk_test",
-        destination={"ne": 20, "se": 20, "up": 0},
+        destination={"ne": 16, "se": 16, "up": 0},
     )
     if not move.ok:
         die(f"move_character failed: {move}")

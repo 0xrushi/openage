@@ -108,11 +108,17 @@ int main(int argc, char **argv) {
 			std::cout << "Entity ID: " << entity_id << "\n";
 			std::cout << "Message: " << message << "\n";
 
-			if (entity_id > 0) {
-				return 0;
-			} else {
+
+			// Determine success based on message prefix (entity ids can be 0).
+			if (message.rfind("ERROR:", 0) == 0) {
 				return 1;
 			}
+			if (message.rfind("SUCCESS:", 0) == 0) {
+				return 0;
+			}
+
+			// Fallback to historical behavior.
+			return entity_id > 0 ? 0 : 1;
 		}
 	} else {
 		std::cerr << "ERROR: No response from game\n";

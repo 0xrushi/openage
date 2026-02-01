@@ -64,6 +64,30 @@ ACTIONS: List[Dict[str, Any]] = [
         "description": "Query game state snapshot from the running game (IPC)",
         "inputs": {
             "query": "string (currently: 'entities')",
+            "owner": "int (optional; filter entities by owner)",
+            "id": "int (optional; filter to a single entity id)",
+            "has": "string (optional; e.g. 'move' or 'selectable')",
+            "limit": "int (optional; max number of results)",
+        },
+    },
+    {
+        "name": "select_by_query",
+        "description": "Select a character using a query over state (agent-side)",
+        "inputs": {
+            "owner": "int (optional; passed to get_state)",
+            "has": "string (optional; passed to get_state)",
+            "limit": "int (optional; passed to get_state)",
+            "strategy": "string (optional; 'nearest' or 'first'; default: 'nearest')",
+            "near": "object {ne,se,up?} (required for strategy='nearest')",
+        },
+    },
+    {
+        "name": "stop_character",
+        "description": "Stop a character (clear its command queue and idle)",
+        "inputs": {
+            "character_id": "int (optional; defaults to current selection)",
+            "tag": "string (optional)",
+            "spawn_index": "int (optional)",
         },
     },
     {
@@ -98,6 +122,61 @@ ACTIONS: List[Dict[str, Any]] = [
             "tag": "string (optional)",
             "spawn_index": "int (optional)",
             "destination": "object {ne,se,up?}",
+        },
+    },
+    {
+        "name": "patrol",
+        "description": "Clear command queue and walk through a sequence of waypoints",
+        "inputs": {
+            "character_id": "int (optional; defaults to current selection)",
+            "tag": "string (optional)",
+            "spawn_index": "int (optional)",
+            "waypoints": "list of objects {ne,se,up?} (at least one required)",
+        },
+    },
+    {
+        "name": "attack_target",
+        "description": "Attack-move toward a target entity (moves attacker to target's current position)",
+        "inputs": {
+            "target": "int (required; target entity id)",
+            "character_id": "int (optional; defaults to current selection)",
+            "tag": "string (optional)",
+            "spawn_index": "int (optional)",
+        },
+    },
+    {
+        "name": "create_group",
+        "description": "Create a named control group from unit ids, tags, or spawn indices",
+        "inputs": {
+            "group_id": "string (required; name or number for the group)",
+            "character_ids": "list[int] (optional)",
+            "tags": "list[string] (optional)",
+            "spawn_indices": "list[int] (optional)",
+        },
+    },
+    {
+        "name": "get_group",
+        "description": "Return the character ids in a control group",
+        "inputs": {
+            "group_id": "string (required)",
+        },
+    },
+    {
+        "name": "disband_group",
+        "description": "Remove a control group (does not affect the units themselves)",
+        "inputs": {
+            "group_id": "string (required)",
+        },
+    },
+    {
+        "name": "command_group",
+        "description": "Issue a command (move_character, stop_character, patrol, attack_target) to every unit in a group",
+        "inputs": {
+            "group_id": "string (required)",
+            "action": "string (move_character | stop_character | patrol | attack_target)",
+            "destination": "object {ne,se,up?} (required for move_character)",
+            "waypoints": "list of objects {ne,se,up?} (required for patrol)",
+            "target": "int (required for attack_target; target entity id)",
         },
     },
 ]

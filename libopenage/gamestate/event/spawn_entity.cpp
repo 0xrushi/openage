@@ -205,7 +205,7 @@ void SpawnEntityHandler::invoke(openage::event::EventLoop & /* loop */,
         }
 
         // Create entity
-        player_id_t owner_id = params.get("owner", 0);
+        player_id_t owner_id = params.get<size_t>("owner", 0);
         auto entity = this->factory->add_game_entity(this->loop, gstate, owner_id, nyan_entity);
 
         // Setup components
