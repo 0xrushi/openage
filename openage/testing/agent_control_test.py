@@ -68,6 +68,10 @@ def test():
                 "move|123|20.000000|20.000000|0.000000",
                 "1|SUCCESS: Move queued",
             ),
+            (
+                "state|entities",
+                '1|{"entities":[{"id":123,"owner":0,"pos":{"ne":14.0,"se":14.0,"up":0.0}}]}',
+            ),
         ]
         t = threading.Thread(target=_serve_many, args=(sock_path, expected, got, ready), daemon=True)
         t.start()
@@ -90,5 +94,12 @@ def test():
         assert_value(res2.ok, True)
         assert_value(res2.supported, True)
         assert_value(res2.data.get("character_id"), 123)
+
+        res3 = agent.act("get_state", query="entities")
+        assert_value(got[2].get("ok_prefix"), True)
+        assert_value(res3.ok, True)
+        assert_value(res3.supported, True)
+        state = res3.data.get("state")
+        assert_value(isinstance(state, dict), True)
     finally:
         shutil.rmtree(tmpdir)

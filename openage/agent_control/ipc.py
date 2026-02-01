@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import socket
+import json
 from typing import Tuple
 
 from .schema import ActionResult, Position
@@ -147,3 +148,32 @@ class IpcClient:
             character_id=int(entity_id),
             message=server_message,
         )
+
+    def get_state(self, query: str) -> ActionResult:
+        action = "get_state"
+        if query != "entities":
+            return ActionResult.error_result(action, f"Unsupported query: {query}")
+
+        cmd = "state|entities"
+        ok, response = self.request(cmd)
+        if not ok:
+            return ActionResult.error_result(
+                action,
+                f"IPC request failed: {response}",
+                socket_path=self.socket_path,
+                command=cmd,
+            )
+
+        if not response:
+            return ActionResult.error_result(action, "IPC server returned empty response", command=cmd)
+
+        status_code, payload = self._parse_response(response)
+        if status_code == 0:
+            return ActionResult.error_result(action, payload or "state query failed", command=cmd)
+
+        try:
+            data = json.loads(payload)
+        except Exception as exc:
+            return ActionResult.error_result(action, f"Failed to parse JSON state: {exc}", raw=payload)
+
+        return ActionResult.ok_result(action, query=query, state=data)

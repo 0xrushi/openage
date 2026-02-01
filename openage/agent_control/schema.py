@@ -60,6 +60,13 @@ class ActionResult:
 # Declarative action definitions.
 ACTIONS: List[Dict[str, Any]] = [
     {
+        "name": "get_state",
+        "description": "Query game state snapshot from the running game (IPC)",
+        "inputs": {
+            "query": "string (currently: 'entities')",
+        },
+    },
+    {
         "name": "switch_active_character",
         "description": "Switch control/spawn type to the next available character",
         "inputs": {},

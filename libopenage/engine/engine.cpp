@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <fcntl.h>
+#include <sstream>
 #include <vector>
 #include <future>
 #include <memory>
@@ -20,9 +21,13 @@
 #include "coord/phys.h"
 #include "cvar/cvar.h"
 #include "event/event_loop.h"
+#include "gamestate/component/internal/ownership.h"
+#include "gamestate/component/internal/position.h"
+#include "gamestate/component/types.h"
 #include "gamestate/event/send_command.h"
 #include "gamestate/event/spawn_entity.h"
 #include "gamestate/game.h"
+#include "gamestate/game_entity.h"
 #include "gamestate/game_state.h"
 #include "gamestate/simulation.h"
 #include "presenter/presenter.h"
@@ -262,6 +267,53 @@ void Engine::run_ipc_server() {
 						}
 						catch (const std::exception &e) {
 							response = std::string{"0|ERROR: Move parse failed: "} + e.what();
+						}
+					}
+					// state|entities
+					else if (parts.size() >= 2 && parts[0] == "state" && parts[1] == "entities") {
+						auto game = this->simulation->get_game();
+						if (!game) {
+							response = "0|ERROR: Game not started yet";
+						}
+						else {
+							auto gstate = game->get_state();
+							auto now = this->time_loop->get_clock()->get_time();
+
+							std::ostringstream ss;
+							ss << "{\"entities\":[";
+							bool first = true;
+							for (const auto &kv : gstate->get_game_entities()) {
+								const auto &entity = kv.second;
+								if (!entity) {
+									continue;
+								}
+
+								auto pos_comp = std::dynamic_pointer_cast<gamestate::component::Position>(
+									entity->get_component(gamestate::component::component_t::POSITION));
+								auto owner_comp = std::dynamic_pointer_cast<gamestate::component::Ownership>(
+									entity->get_component(gamestate::component::component_t::OWNERSHIP));
+
+								if (!pos_comp || !owner_comp) {
+									continue;
+								}
+
+								auto pos = pos_comp->get_positions().get(now);
+								auto owner = owner_comp->get_owners().get(now);
+
+								if (!first) {
+									ss << ',';
+								}
+								first = false;
+
+								ss << "{\"id\":" << entity->get_id();
+								ss << ",\"owner\":" << owner;
+								ss << ",\"pos\":{\"ne\":" << pos.ne.to_double();
+								ss << ",\"se\":" << pos.se.to_double();
+								ss << ",\"up\":" << pos.up.to_double() << "}}";
+							}
+							ss << "]}";
+
+							response = "1|" + ss.str();
 						}
 					}
 

@@ -35,6 +35,7 @@ class OpenAgeAgent:
 
     def capabilities(self) -> Dict[str, bool]:
         return {
+            "get_state": True,
             "spawn_character": True,
             "switch_active_character": False,
             "select_character": False,
@@ -44,6 +45,10 @@ class OpenAgeAgent:
         }
 
     def act(self, name: str, **kwargs: Any) -> ActionResult:
+        if name == "get_state":
+            query = kwargs.get("query", "entities")
+            return self._ipc.get_state(str(query))
+
         if name == "spawn_character":
             return self._spawn_character(**kwargs)
 
