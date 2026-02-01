@@ -17,6 +17,7 @@ add_cython_modules(
 )
 
 add_subdirectory(cabextract)
+add_subdirectory(agent_control)
 add_subdirectory(codegen)
 add_subdirectory(convert)
 add_subdirectory(cppinterface)

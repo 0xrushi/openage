@@ -31,6 +31,10 @@ def tests_py():
            "translates the exception back and forth a few times")
     yield ("openage.testing.misc_cpp.enum",
            "tests the interface for C++'s util::Enum class")
+    yield ("openage.testing.spawn_tool_wrapper_test.test",
+           "unit test for spawn.py wrapper")
+    yield ("openage.testing.agent_control_test.test",
+           "unit test for openage.agent_control")
     yield ("openage.util.fslike.test.test",
            "test the filesystem abstraction subsystem")
     yield "openage.util.threading.test_concurrent_chain"

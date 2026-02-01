@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <fcntl.h>
+#include <vector>
 #include <future>
 #include <memory>
 #include <sys/socket.h>
@@ -12,11 +13,14 @@
 #include <unistd.h>
 
 #include "log/log.h"
+#include "gamestate/component/internal/commands/types.h"
+#include "gamestate/types.h"
 #include "log/message.h"
 
 #include "coord/phys.h"
 #include "cvar/cvar.h"
 #include "event/event_loop.h"
+#include "gamestate/event/send_command.h"
 #include "gamestate/event/spawn_entity.h"
 #include "gamestate/game.h"
 #include "gamestate/game_state.h"
@@ -149,29 +153,37 @@ void Engine::run_ipc_server() {
 				if (bytes_read > 0) {
 					buffer[bytes_read] = '\0';
 
-					// Parse spawn command
 					std::string command(buffer);
 
-					// Extract parameters: spawn|<nyan_entity>|<owner>|<ne>|<se>|<up>
-					size_t pos1 = command.find('|');
-					if (pos1 != std::string::npos && command.substr(0, pos1) == "spawn") {
-						size_t pos2 = command.find('|', pos1 + 1);
-						size_t pos3 = command.find('|', pos2 + 1);
-						size_t pos4 = command.find('|', pos3 + 1);
+					auto split = [](const std::string &s, char delim) {
+						std::vector<std::string> parts;
+						parts.reserve(8);
+						size_t start = 0;
+						while (true) {
+							size_t pos = s.find(delim, start);
+							if (pos == std::string::npos) {
+								parts.push_back(s.substr(start));
+								break;
+							}
+							parts.push_back(s.substr(start, pos - start));
+							start = pos + 1;
+						}
+						return parts;
+					};
 
-						if (pos2 != std::string::npos
-						    && pos3 != std::string::npos
-						    && pos4 != std::string::npos) {
-							std::string nyan_entity = command.substr(pos1 + 1, pos2 - pos1 - 1);
-							size_t owner = std::atoll(command.substr(pos2 + 1, pos3 - pos2 - 1).c_str());
-							double ne = std::atof(command.substr(pos3 + 1, pos4 - pos3 - 1).c_str());
+					std::string response = "0|ERROR: Invalid command";
+					auto parts = split(command, '|');
 
-							// se field; atof stops at '|' if up follows
-							double se = std::atof(command.substr(pos4 + 1).c_str());
+					// spawn|<nyan_entity>|<owner>|<ne>|<se>|<up>
+					if (parts.size() >= 6 && parts[0] == "spawn") {
+						try {
+							auto nyan_entity = parts[1];
+							auto owner = static_cast<size_t>(std::stoull(parts[2]));
+							double ne = std::stod(parts[3]);
+							double se = std::stod(parts[4]);
+							double up = std::stod(parts[5]);
 
-							coord::phys3 pos{coord::phys_t{ne}, coord::phys_t{se}, coord::phys_t{0.0}};
-
-							std::string response;
+							coord::phys3 pos{coord::phys_t{ne}, coord::phys_t{se}, coord::phys_t{up}};
 
 							// Wait for the simulation to be ready
 							auto game = this->simulation->get_game();
@@ -211,10 +223,49 @@ void Engine::run_ipc_server() {
 									response = "0|ERROR: Spawn timed out for " + nyan_entity;
 								}
 							}
-
-							write(client_fd, response.c_str(), response.length());
+						}
+						catch (const std::exception &e) {
+							response = std::string{"0|ERROR: Spawn parse failed: "} + e.what();
 						}
 					}
+					// move|<entity_id>|<ne>|<se>|<up>
+					else if (parts.size() >= 5 && parts[0] == "move") {
+						try {
+							auto entity_id = static_cast<uint64_t>(std::stoull(parts[1]));
+							double ne = std::stod(parts[2]);
+							double se = std::stod(parts[3]);
+							double up = std::stod(parts[4]);
+
+							coord::phys3 target{coord::phys_t{ne}, coord::phys_t{se}, coord::phys_t{up}};
+
+							auto game = this->simulation->get_game();
+							if (!game) {
+								response = "0|ERROR: Game not started yet";
+							}
+							else {
+								openage::event::EventHandler::param_map::map_t params{
+									{"type", gamestate::component::command::command_t::MOVE},
+									{"target", target},
+									{"entity_ids", std::vector<gamestate::entity_id_t>{static_cast<gamestate::entity_id_t>(entity_id)}},
+								};
+
+								auto current_time = this->time_loop->get_clock()->get_time();
+								this->simulation->get_event_loop()->create_event(
+									"game.send_command",
+									std::static_pointer_cast<openage::event::EventEntity>(this->simulation->get_commander()),
+									game->get_state(),
+									current_time,
+									params);
+
+								response = "1|SUCCESS: Move queued";
+							}
+						}
+						catch (const std::exception &e) {
+							response = std::string{"0|ERROR: Move parse failed: "} + e.what();
+						}
+					}
+
+					write(client_fd, response.c_str(), response.length());
 					close(client_fd);
 				}
 			}

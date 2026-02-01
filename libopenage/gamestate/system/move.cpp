@@ -126,6 +126,16 @@ const time::time_t Move::move_default(const std::shared_ptr<gamestate::GameEntit
 	auto grid_id = map->get_grid_id(move_path_grid->get_name());
 	auto waypoints = find_path(pathfinder, grid_id, current_pos, destination, start_time);
 
+	// Fallback: if no path is available, move in a straight line.
+	// This keeps basic unit movement functional even when path grids are missing.
+	if (waypoints.empty()) {
+		log::log(MSG(warn) << "No path found for entity " << entity->get_id()
+		                   << " from " << current_pos
+		                   << " to " << destination
+		                   << "; using straight-line fallback");
+		waypoints = {current_pos, destination};
+	}
+
 	// use waypoints for movement
 	double total_time = 0;
 	pos_component->set_position(start_time, current_pos);
